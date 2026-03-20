@@ -42,7 +42,8 @@ Render provides `PORT` automatically, which Nitro uses in production.
 ## Deployment Checks
 
 - `npm run test:deploy` validates the local Render config and required root files.
-- `npm test` runs deployment checks plus Nuxt typecheck.
+- `npm run test:smoke` starts the built Nitro server and verifies the main UI is present in production HTML.
+- `npm test` runs deployment checks, typecheck, production build, and the Render smoke test.
 
 ## Research Baseline
 
