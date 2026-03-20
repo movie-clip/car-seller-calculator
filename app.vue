@@ -111,8 +111,10 @@ const scenario = reactive({
 const hasCalculated = ref(true)
 const cardEdits = reactive<Record<string, CardEdit>>({})
 const isCalculating = ref(false)
+const isCalculationFinished = ref(false)
 const parseError = ref('')
 const parsedListing = ref<ParsedListing | null>(null)
+let finishAnimationTimeout: ReturnType<typeof setTimeout> | null = null
 
 const euroFormatter = new Intl.NumberFormat('en-IE', {
   style: 'currency',
@@ -359,6 +361,12 @@ function updateCardValue(id: string, event: Event) {
 }
 
 async function calculate() {
+  if (finishAnimationTimeout) {
+    clearTimeout(finishAnimationTimeout)
+    finishAnimationTimeout = null
+  }
+
+  isCalculationFinished.value = false
   parseError.value = ''
   isCalculating.value = true
 
@@ -401,12 +409,23 @@ async function calculate() {
     scenario.sellerMode = response.suggestedScenario.sellerMode
 
     hasCalculated.value = true
+    isCalculationFinished.value = true
+    finishAnimationTimeout = setTimeout(() => {
+      isCalculationFinished.value = false
+      finishAnimationTimeout = null
+    }, 1400)
   } catch (error) {
     parseError.value = error instanceof Error ? error.message : 'Could not parse this mobile.de URL.'
   } finally {
     isCalculating.value = false
   }
 }
+
+onBeforeUnmount(() => {
+  if (finishAnimationTimeout) {
+    clearTimeout(finishAnimationTimeout)
+  }
+})
 
 const helperText = computed(() => {
   if (vehicleCountsAsNew.value) {
@@ -418,8 +437,8 @@ const helperText = computed(() => {
 </script>
 
 <template>
-  <div class="import-page">
-    <main class="import-shell">
+  <div class="import-page" :class="{ 'is-calculating': isCalculating, 'is-finished': isCalculationFinished }">
+    <main class="import-shell content-layer">
       <section class="top-strip">
         <div class="url-panel">
           <div class="url-actions">
@@ -708,5 +727,26 @@ const helperText = computed(() => {
         </div>
       </section>
     </main>
+
+    <transition name="calculation-overlay">
+      <div v-if="isCalculating" class="calculation-overlay">
+        <div class="calculation-modal">
+          <div class="calculation-progress">
+            <div class="progress-track">
+              <span class="progress-stream" />
+              <span class="progress-runner" />
+            </div>
+          </div>
+          <strong>Parsing listing and recalculating import costs</strong>
+          <p>Hold on a second while the car data and Spanish cost cards update.</p>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="success-toast">
+      <div v-if="isCalculationFinished && !isCalculating" class="success-toast">
+        Calculation updated
+      </div>
+    </transition>
   </div>
 </template>

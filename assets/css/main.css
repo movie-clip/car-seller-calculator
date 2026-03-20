@@ -40,6 +40,28 @@ body {
     linear-gradient(180deg, #07111f 0%, #0b1628 52%, #101b31 100%);
 }
 
+.import-page {
+  position: relative;
+  min-height: 100vh;
+}
+
+.content-layer {
+  position: relative;
+  z-index: 1;
+  transition: filter 220ms ease, transform 220ms ease, opacity 220ms ease;
+}
+
+.import-page.is-calculating .content-layer {
+  filter: blur(10px) saturate(0.8);
+  transform: scale(0.992);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.import-page.is-finished .content-layer {
+  animation: content-settle 700ms ease;
+}
+
 button,
 input,
 select {
@@ -206,6 +228,10 @@ select {
   transform: translateY(-1px);
 }
 
+.calculate-button:not(:disabled):active {
+  transform: translateY(0) scale(0.985);
+}
+
 .section-head,
 .results-head,
 .cost-head,
@@ -364,6 +390,157 @@ select {
 .calculate-button:disabled {
   opacity: 0.7;
   cursor: wait;
+}
+
+.calculation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(3, 8, 20, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.calculation-modal {
+  width: min(420px, 100%);
+  padding: 28px 24px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top, rgba(96, 165, 250, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(9, 17, 31, 0.96) 0%, rgba(14, 26, 44, 0.94) 100%);
+  box-shadow: 0 28px 70px rgba(2, 6, 23, 0.5);
+  text-align: center;
+}
+
+.calculation-modal strong {
+  display: block;
+  margin-top: 18px;
+  font-size: 1.05rem;
+}
+
+.calculation-modal p {
+  margin: 10px 0 0;
+  color: var(--text-soft);
+  line-height: 1.6;
+}
+
+.calculation-progress {
+  width: min(300px, 100%);
+  margin: 0 auto;
+}
+
+.progress-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.progress-stream {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0) 0%, rgba(96, 165, 250, 0.14) 18%, rgba(20, 184, 166, 0.28) 50%, rgba(96, 165, 250, 0.14) 82%, rgba(96, 165, 250, 0) 100%);
+  animation: stream-shift 1.5s linear infinite;
+}
+
+.progress-runner {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 64px;
+  height: 100%;
+  border-radius: 999px;
+  transform: translateY(-50%);
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0) 0%, rgba(96, 165, 250, 0.85) 48%, rgba(45, 212, 191, 0.95) 100%);
+  filter: blur(1px);
+  animation: runner-slide 1.35s ease-in-out infinite;
+}
+
+.success-toast {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 25;
+  padding: 14px 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(20, 184, 166, 0.96) 0%, rgba(13, 148, 136, 0.96) 100%);
+  color: #031311;
+  font-weight: 700;
+  box-shadow: 0 18px 40px rgba(20, 184, 166, 0.25);
+}
+
+.calculation-overlay-enter-active,
+.calculation-overlay-leave-active,
+.success-toast-enter-active,
+.success-toast-leave-active {
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.calculation-overlay-enter-from,
+.calculation-overlay-leave-to,
+.success-toast-enter-from,
+.success-toast-leave-to {
+  opacity: 0;
+}
+
+.calculation-overlay-enter-from .calculation-modal,
+.calculation-overlay-leave-to .calculation-modal {
+  transform: translateY(10px) scale(0.98);
+}
+
+.success-toast-enter-from,
+.success-toast-leave-to {
+  transform: translateY(12px);
+}
+
+@keyframes stream-shift {
+  0% {
+    transform: translateX(-12%);
+    opacity: 0.6;
+  }
+
+  50% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(12%);
+    opacity: 0.6;
+  }
+}
+
+@keyframes runner-slide {
+  0% {
+    transform: translateY(-50%) translateX(0);
+  }
+
+  50% {
+    transform: translateY(-50%) translateX(220px);
+  }
+
+  100% {
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+@keyframes content-settle {
+  0% {
+    transform: scale(0.992);
+  }
+
+  55% {
+    transform: scale(1.008);
+  }
+
+  100% {
+    transform: scale(1);
+  }
 }
 
 @media (max-width: 1180px) {
