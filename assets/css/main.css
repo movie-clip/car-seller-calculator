@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #edf3f9;
-  --paper: #ffffff;
-  --paper-soft: rgba(255, 255, 255, 0.78);
-  --line: rgba(15, 23, 42, 0.08);
-  --line-strong: rgba(15, 23, 42, 0.16);
-  --text: #0f172a;
-  --text-soft: #617188;
-  --accent: #0f766e;
-  --accent-deep: #115e59;
-  --teal: #2563eb;
-  --shadow: 0 18px 50px rgba(15, 23, 42, 0.1);
+  --bg: #07111f;
+  --paper: #0f1b2d;
+  --paper-soft: rgba(15, 27, 45, 0.82);
+  --line: rgba(148, 163, 184, 0.14);
+  --line-strong: rgba(148, 163, 184, 0.22);
+  --text: #e5eefb;
+  --text-soft: #95a7c3;
+  --accent: #14b8a6;
+  --accent-deep: #0f766e;
+  --teal: #60a5fa;
+  --shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
   --radius-xl: 28px;
   --radius-lg: 20px;
   --radius-md: 14px;
@@ -35,9 +35,9 @@ body {
   margin: 0;
   color: var(--text);
   background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.14), transparent 24%),
-    radial-gradient(circle at top right, rgba(15, 118, 110, 0.14), transparent 18%),
-    linear-gradient(180deg, #f3f7fb 0%, #dfe9f3 100%);
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.14), transparent 24%),
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.12), transparent 18%),
+    linear-gradient(180deg, #07111f 0%, #0b1628 52%, #101b31 100%);
 }
 
 button,
@@ -81,7 +81,7 @@ select {
 .listing-item {
   padding: 22px;
   background: var(--paper-soft);
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
@@ -111,7 +111,7 @@ select {
 }
 
 .error-line {
-  color: #b42318;
+  color: #f87171;
   margin: 0;
 }
 
@@ -162,15 +162,15 @@ select {
   min-height: 48px;
   padding: 12px 14px;
   color: var(--text);
-  background: rgba(248, 250, 252, 0.92);
+  background: rgba(10, 18, 32, 0.92);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
 }
 
 .field-input:focus,
 .mini-input:focus {
-  outline: 2px solid rgba(37, 99, 235, 0.14);
-  border-color: rgba(37, 99, 235, 0.28);
+  outline: 2px solid rgba(96, 165, 250, 0.16);
+  border-color: rgba(96, 165, 250, 0.38);
 }
 
 .calculate-button,
@@ -189,16 +189,16 @@ select {
 .calculate-button {
   width: 100%;
   background: linear-gradient(180deg, var(--accent) 0%, var(--accent-deep) 100%);
-  color: #f8fffe;
+  color: #041311;
   font-weight: 700;
-  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.2);
+  box-shadow: 0 10px 28px rgba(20, 184, 166, 0.26);
 }
 
 .mini-button {
   min-height: 40px;
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(96, 165, 250, 0.12);
   color: var(--teal);
-  border: 1px solid rgba(37, 99, 235, 0.14);
+  border: 1px solid rgba(96, 165, 250, 0.18);
 }
 
 .calculate-button:hover,
@@ -226,7 +226,7 @@ select {
   margin: 14px 0 0;
   padding: 14px 16px;
   border-radius: var(--radius-md);
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(96, 165, 250, 0.1);
 }
 
 .results-block {
@@ -274,9 +274,9 @@ select {
 .note-pill {
   padding: 9px 12px;
   border-radius: 999px;
-  background: rgba(15, 118, 110, 0.1);
-  border: 1px solid rgba(15, 118, 110, 0.14);
-  color: var(--accent-deep);
+  background: rgba(20, 184, 166, 0.12);
+  border: 1px solid rgba(20, 184, 166, 0.18);
+  color: #86efe5;
   font-size: 0.86rem;
   font-weight: 500;
 }
@@ -284,13 +284,13 @@ select {
 .total-chip {
   padding: 14px 16px;
   border-radius: 18px;
-  background: linear-gradient(180deg, rgba(15, 118, 110, 0.1) 0%, rgba(255, 255, 255, 0.94) 100%);
-  border: 1px solid rgba(15, 118, 110, 0.14);
+  background: linear-gradient(180deg, rgba(20, 184, 166, 0.14) 0%, rgba(15, 27, 45, 0.9) 100%);
+  border: 1px solid rgba(20, 184, 166, 0.16);
 }
 
 .total-chip-secondary {
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.1) 0%, rgba(255, 255, 255, 0.94) 100%);
-  border-color: rgba(37, 99, 235, 0.14);
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.14) 0%, rgba(15, 27, 45, 0.9) 100%);
+  border-color: rgba(96, 165, 250, 0.18);
 }
 
 .total-chip span,
@@ -320,7 +320,7 @@ select {
 .formula-total {
   padding: 16px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(37, 99, 235, 0.08) 0%, rgba(255, 255, 255, 0.72) 100%);
+  background: linear-gradient(180deg, rgba(96, 165, 250, 0.12) 0%, rgba(15, 27, 45, 0.82) 100%);
   overflow-x: auto;
   line-height: 1.7;
 }
@@ -349,7 +349,7 @@ select {
 .cost-formula {
   display: block;
   min-height: 52px;
-  color: var(--accent);
+  color: #67e8f9;
 }
 
 .card-actions {
