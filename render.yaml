@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: car-seller-service
+    runtime: node
+    rootDir: apps/car-seller-service
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: NITRO_PORT
+        value: 10000
+      - key: HOST
+        value: 0.0.0.0
