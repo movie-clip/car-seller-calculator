@@ -23,6 +23,11 @@ interface ParsedListing {
   notes: string[]
 }
 
+interface FetchCandidate {
+  label: string
+  url: string
+}
+
 function createErrorMessage(statusCode: number, statusMessage: string): never {
   throw createError({ statusCode, statusMessage })
 }
@@ -190,6 +195,94 @@ function extractNotes(text: string) {
   return notes
 }
 
+function extractListingId(parsedUrl: URL) {
+  const queryId = parsedUrl.searchParams.get('id')?.trim()
+
+  if (queryId) {
+    return queryId
+  }
+
+  return parsedUrl.pathname.match(/id=(\d+)/)?.[1] ?? null
+}
+
+function buildFetchCandidates(parsedUrl: URL) {
+  const listingId = extractListingId(parsedUrl)
+  const candidates: FetchCandidate[] = [
+    {
+      label: 'details-page',
+      url: `https://r.jina.ai/http://${stripProtocol(parsedUrl.toString())}`,
+    },
+  ]
+
+  if (listingId) {
+    candidates.push(
+      {
+        label: 'canonical-details',
+        url: `https://r.jina.ai/http://suchen.mobile.de/fahrzeuge/details.html?id=${listingId}`,
+      },
+      {
+        label: 'print-view',
+        url: `https://r.jina.ai/http://suchen.mobile.de/fahrzeuge/printView.html?id=${listingId}`,
+      },
+    )
+  }
+
+  return candidates
+}
+
+function isBlockedResponse(text: string) {
+  const lowered = text.toLowerCase()
+
+  return (
+    lowered.includes('zugriff verweigert')
+    || lowered.includes('access denied')
+    || lowered.includes('powered and protected by')
+    || lowered.includes('akamai')
+  )
+}
+
+function looksLikeListing(text: string) {
+  return text.includes('Kilometerstand') || text.includes('### Technische Daten') || text.includes('## ')
+}
+
+async function fetchListingText(parsedUrl: URL) {
+  const candidates = buildFetchCandidates(parsedUrl)
+  let blocked = false
+
+  for (const candidate of candidates) {
+    const response = await fetch(candidate.url, {
+      headers: {
+        'User-Agent': 'car-seller-service/1.0',
+        Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
+      },
+    })
+
+    if (!response.ok) {
+      continue
+    }
+
+    const text = await response.text()
+
+    if (isBlockedResponse(text)) {
+      blocked = true
+      continue
+    }
+
+    if (looksLikeListing(text)) {
+      return {
+        fetchedUrl: candidate.url,
+        text,
+      }
+    }
+  }
+
+  if (blocked) {
+    createErrorMessage(502, 'mobile.de blocked this listing request. Try opening the ad again later or paste a different listing URL.')
+  }
+
+  createErrorMessage(502, 'Listing content could not be parsed from mobile.de.')
+}
+
 export default defineEventHandler(async (event) => {
   const body = await readBody<ParseMobileRequest>(event)
   const url = body.url?.trim()
@@ -210,23 +303,7 @@ export default defineEventHandler(async (event) => {
     createErrorMessage(400, 'Only mobile.de URLs are supported')
   }
 
-  const fetchUrl = `https://r.jina.ai/http://${stripProtocol(parsedUrl.toString())}`
-  const response = await fetch(fetchUrl, {
-    headers: {
-      'User-Agent': 'car-seller-service/1.0',
-      Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
-    },
-  })
-
-  if (!response.ok) {
-    createErrorMessage(502, 'Unable to fetch listing details from mobile.de')
-  }
-
-  const text = await response.text()
-
-  if (!text.includes('mobile.de') && !text.includes('Kilometerstand')) {
-    createErrorMessage(502, 'Listing content could not be parsed')
-  }
+  const { fetchedUrl, text } = await fetchListingText(parsedUrl)
 
   const firstRegistration = parseFirstRegistration(text)
   const ageMonths = parseAgeMonths(firstRegistration)
@@ -235,7 +312,7 @@ export default defineEventHandler(async (event) => {
 
   const listing: ParsedListing = {
     sourceUrl: parsedUrl.toString(),
-    fetchedUrl: fetchUrl,
+    fetchedUrl,
     title: parseTitle(text),
     subtitle: parseSubtitle(text),
     priceEur: parsePrice(text),

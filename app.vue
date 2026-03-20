@@ -370,11 +370,15 @@ async function calculate() {
       },
     })
 
-    if (!isParseResponse(response)) {
-      throw new Error('Parser returned an unexpected response. Refresh the page and try again.')
-    }
+     if (!isParseResponse(response)) {
+       throw new Error('Parser returned an unexpected response. Refresh the page and try again.')
+     }
 
-    parsedListing.value = response.listing
+      if (!response.listing.priceEur && !response.listing.mileageKm && !response.listing.firstRegistration) {
+        throw new Error('This mobile.de listing could not be parsed. The source may be blocked or missing key vehicle data.')
+      }
+
+      parsedListing.value = response.listing
 
     if (response.suggestedScenario.purchasePrice !== null) {
       scenario.purchasePrice = response.suggestedScenario.purchasePrice

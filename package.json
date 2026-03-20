@@ -7,8 +7,9 @@
     "build": "nuxt build",
     "start": "node .output/server/index.mjs",
     "preview": "nuxt preview",
-    "test": "npm run test:deploy && npm run typecheck && npm run build && npm run test:smoke",
+    "test": "npm run test:deploy && npm run test:parser && npm run typecheck && npm run build && npm run test:smoke",
     "test:deploy": "node scripts/validate-render-config.mjs",
+    "test:parser": "node scripts/test-parse-fixtures.mjs",
     "test:smoke": "node scripts/smoke-production-render.mjs",
     "typecheck": "nuxt typecheck",
     "postinstall": "nuxt prepare"
