@@ -23,11 +23,11 @@ Option 1: Blueprint
 
 - Create a new Blueprint service in Render.
 - Point Render at this repository.
-- Render will use `apps/car-seller-service/render.yaml`.
+- Render will use `render.yaml` from the repository root.
 
 Option 2: Manual Web Service
 
-- Root directory: `apps/car-seller-service`
+- Root directory: leave empty
 - Build command: `npm install && npm run build`
 - Start command: `npm run start`
 - Runtime: Node
@@ -38,6 +38,11 @@ Recommended environment values:
 - `HOST=0.0.0.0`
 
 Render provides `PORT` automatically, which Nitro uses in production.
+
+## Deployment Checks
+
+- `npm run test:deploy` validates the local Render config and required root files.
+- `npm test` runs deployment checks plus Nuxt typecheck.
 
 ## Research Baseline
 
