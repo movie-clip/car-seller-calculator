@@ -23,6 +23,23 @@ interface ParsedListing {
   notes: string[]
 }
 
+interface HomeMobileListingData {
+  shortTitle: string | null
+  subTitle: string | null
+  priceEur: number | null
+  mileageKm: number | null
+  fuel: string | null
+  transmission: string | null
+  firstRegistration: string | null
+  powerKw: number | null
+  powerPs: number | null
+  engineCc: number | null
+  sellerType: 'dealer' | 'private' | 'unknown'
+  sellerName: string | null
+  location: string | null
+  co2Gkm: number | null
+}
+
 interface FetchCandidate {
   label: string
   url: string
@@ -32,8 +49,8 @@ function createErrorMessage(statusCode: number, statusMessage: string): never {
   throw createError({ statusCode, statusMessage })
 }
 
-function stripProtocol(url: string) {
-  return url.replace(/^https?:\/\//i, '')
+function toJinaUrl(url: string) {
+  return `https://r.jina.ai/http://${url}`
 }
 
 function matchGroup(text: string, pattern: RegExp, index = 1) {
@@ -195,6 +212,243 @@ function extractNotes(text: string) {
   return notes
 }
 
+function decodeUnicodeEscapes(value: string) {
+  return value.replace(/\\u([0-9a-fA-F]{4})/g, (_, code: string) => String.fromCharCode(Number.parseInt(code, 16)))
+}
+
+function cleanHomeValue(value: string | null) {
+  if (!value) {
+    return null
+  }
+
+  return decodeUnicodeEscapes(value)
+    .replace(/�/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function parsePowerString(value: string | null) {
+  if (!value) {
+    return { powerKw: null, powerPs: null }
+  }
+
+  const normalized = cleanHomeValue(value)
+  const match = normalized?.match(/(\d+)\s*kW\s*\((\d+)\s*PS\)/i)
+
+  return {
+    powerKw: match ? Number(match[1]) : null,
+    powerPs: match ? Number(match[2]) : null,
+  }
+}
+
+function parseHomeMobileBlock(text: string, listingId: string) {
+  const idMarker = `"id":${listingId}`
+  let idIndex = text.indexOf(idMarker)
+
+  if (idIndex === -1) {
+    idIndex = text.indexOf(`adId=${listingId}`)
+  }
+
+  if (idIndex === -1) {
+    return null
+  }
+
+  const start = Math.max(0, idIndex - 5000)
+  const end = Math.min(text.length, idIndex + 12000)
+
+  return text.slice(start, end)
+}
+
+function matchHomeField(block: string, field: string) {
+  return cleanHomeValue(matchGroup(block, new RegExp(`"${field}":"([^"]+)"`, 'i')))
+}
+
+function parseHomeMobileListing(text: string, listingId: string): HomeMobileListingData | null {
+  const block = parseHomeMobileBlock(text, listingId)
+
+  if (!block) {
+    return null
+  }
+
+  const title = matchHomeField(block, 'shortTitle')
+  const subtitle = matchHomeField(block, 'subTitle')
+  const priceValue = matchHomeField(block, 'p')
+  const mileage = matchHomeField(block, 'ml')
+  const firstRegistration = matchHomeField(block, 'fr')
+  const fuel = matchHomeField(block, 'ft')
+  const transmission = matchHomeField(block, 'tr')
+  const engineCc = matchHomeField(block, 'cc')
+  const locationZip = matchHomeField(block, 'z')
+  const locationCity = matchHomeField(block, 'loc')
+  const sellerName = matchHomeField(block, 'name')
+  const sellerTypeRaw = matchHomeField(block, 'st')
+  const co2Raw = matchHomeField(block, 'co2')
+  const power = parsePowerString(matchHomeField(block, 'pw'))
+
+  return {
+    shortTitle: title,
+    subTitle: subtitle,
+    priceEur: parseGermanNumber(priceValue),
+    mileageKm: parseGermanNumber(mileage),
+    fuel,
+    transmission,
+    firstRegistration,
+    powerKw: power.powerKw,
+    powerPs: power.powerPs,
+    engineCc: parseGermanNumber(engineCc),
+    sellerType: sellerTypeRaw?.toLowerCase().includes('privat') ? 'private' : sellerTypeRaw ? 'dealer' : 'unknown',
+    sellerName,
+    location: locationZip && locationCity ? `DK-${locationZip} ${locationCity}` : locationCity,
+    co2Gkm: parseGermanNumber(co2Raw),
+  }
+}
+
+function parseHomeMobileMarkdown(text: string, listingId: string): HomeMobileListingData | null {
+  return extractListingFromDealerMarkdown(text, listingId)
+}
+
+async function fetchDealerHomeText(text: string, listingId: string) {
+  const customerId = matchGroup(text, /customerId=(\d+)/i)
+  const dealerSlug = matchGroup(text, /https:\/\/home\.mobile\.de\/([A-Z0-9_-]+)/i)
+  const directHomeCustomerId = matchGroup(text, /sellerId":(\d+)/i)
+
+  const urls = [
+    customerId ? `https://home.mobile.de/home/index.html?customerId=${customerId}&id=${listingId}` : null,
+    directHomeCustomerId ? `https://home.mobile.de/home/index.html?customerId=${directHomeCustomerId}&id=${listingId}` : null,
+    dealerSlug ? `https://home.mobile.de/${dealerSlug}` : null,
+  ].filter((value): value is string => Boolean(value))
+
+  for (const url of urls) {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    })
+
+    if (!response.ok) {
+      continue
+    }
+
+    const html = await response.text()
+    const parsed = parseHomeMobileListing(html, listingId)
+
+    if (parsed?.priceEur || parsed?.mileageKm || parsed?.firstRegistration) {
+      return parsed
+    }
+  }
+
+  for (const url of urls) {
+    const markdown = await fetchText(toJinaUrl(url), {
+      'User-Agent': 'car-seller-service/1.0',
+      Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
+    })
+
+    if (!markdown) {
+      continue
+    }
+
+    const parsed = parseHomeMobileMarkdown(markdown, listingId)
+
+    if (parsed?.priceEur || parsed?.mileageKm || parsed?.firstRegistration) {
+      return parsed
+    }
+  }
+
+  return null
+}
+
+function extractListingFromDealerMarkdown(text: string, listingId: string): HomeMobileListingData | null {
+  const normalized = text.replace(/�/g, '€').replace(/\uFFFD/g, '€')
+  const listingIndex = normalized.indexOf(listingId)
+
+  if (listingIndex === -1) {
+    const simplePattern = /###\s+([^\n]+)\n\n([\d.,]+)[€]?\n\nFinanzierung[\s\S]*?EZ\s+(\d{2}\/\d{4})\s+[^\n]*?([\d.]+)\s+km\s+[^\n]*?(\d+)\s+kW\((\d+)\s+PS\)\s+[^\n]*?([A-Za-zÄÖÜäöüß]+)/i
+    const fallbackMatch = normalized.match(simplePattern)
+
+    if (!fallbackMatch) {
+      return null
+    }
+
+    return {
+      shortTitle: cleanHomeValue(fallbackMatch[1] ?? null),
+      subTitle: null,
+      priceEur: parseGermanNumber(fallbackMatch[2] ?? null),
+      mileageKm: parseGermanNumber(fallbackMatch[4] ?? null),
+      fuel: cleanHomeValue(fallbackMatch[7] ?? null),
+      transmission: null,
+      firstRegistration: cleanHomeValue(fallbackMatch[3] ?? null),
+      powerKw: Number(fallbackMatch[5]),
+      powerPs: Number(fallbackMatch[6]),
+      engineCc: null,
+      sellerType: 'dealer',
+      sellerName: null,
+      location: matchGroup(normalized, /(DK-\d{4}\s+[^\n]+)/i),
+      co2Gkm: null,
+    }
+  }
+
+  const blockStart = normalized.lastIndexOf('### ', listingIndex)
+  const blockEnd = normalized.indexOf('Kontakt Parken', listingIndex)
+
+  if (blockStart === -1 || blockEnd === -1) {
+    return null
+  }
+
+  const block = normalized.slice(blockStart, blockEnd + 'Kontakt Parken'.length)
+  const match = block.match(/###\s+([^\n]+)\n\n([\d.,]+)[€]?\n\nFinanzierung[\s\S]*?EZ\s+(\d{2}\/\d{4})\s+[^\n]*?([\d.]+)\s+km\s+[^\n]*?(\d+)\s+kW\((\d+)\s+PS\)\s+[^\n]*?([A-Za-zÄÖÜäöüß]+)/i)
+
+  if (!match) {
+    return null
+  }
+
+  return {
+    shortTitle: cleanHomeValue(match[1] ?? null),
+    subTitle: null,
+    priceEur: parseGermanNumber(match[2] ?? null),
+    mileageKm: parseGermanNumber(match[4] ?? null),
+    fuel: cleanHomeValue(match[7] ?? null),
+    transmission: null,
+    firstRegistration: cleanHomeValue(match[3] ?? null),
+    powerKw: Number(match[5]),
+    powerPs: Number(match[6]),
+    engineCc: null,
+    sellerType: 'dealer',
+    sellerName: null,
+    location: matchGroup(text, /(DK-\d{4}\s+[^\n]+)/i),
+    co2Gkm: null,
+  }
+}
+
+async function fetchDealerHomeFromSearch(listingId: string) {
+  const searchUrl = toJinaUrl(`https://duckduckgo.com/html/?q=${encodeURIComponent(`${listingId} mobile.de`)}`)
+  const searchText = await fetchText(searchUrl, {
+    'User-Agent': 'car-seller-service/1.0',
+    Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
+  })
+
+  if (!searchText) {
+    return null
+  }
+
+  const dealerUrl = matchGroup(searchText, /https:\/\/home\.mobile\.de\/[A-Z0-9_-]+/i, 0)
+
+  if (!dealerUrl) {
+    return null
+  }
+
+  const dealerText = await fetchText(toJinaUrl(dealerUrl), {
+    'User-Agent': 'car-seller-service/1.0',
+    Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
+  })
+
+  if (!dealerText) {
+    return null
+  }
+
+  return extractListingFromDealerMarkdown(dealerText, listingId)
+}
+
 function extractListingId(parsedUrl: URL) {
   const queryId = parsedUrl.searchParams.get('id')?.trim()
 
@@ -210,7 +464,7 @@ function buildFetchCandidates(parsedUrl: URL) {
   const candidates: FetchCandidate[] = [
     {
       label: 'details-page',
-      url: `https://r.jina.ai/http://${stripProtocol(parsedUrl.toString())}`,
+      url: toJinaUrl(parsedUrl.toString()),
     },
   ]
 
@@ -218,11 +472,11 @@ function buildFetchCandidates(parsedUrl: URL) {
     candidates.push(
       {
         label: 'canonical-details',
-        url: `https://r.jina.ai/http://suchen.mobile.de/fahrzeuge/details.html?id=${listingId}`,
+        url: toJinaUrl(`https://suchen.mobile.de/fahrzeuge/details.html?id=${listingId}`),
       },
       {
         label: 'print-view',
-        url: `https://r.jina.ai/http://suchen.mobile.de/fahrzeuge/printView.html?id=${listingId}`,
+        url: toJinaUrl(`https://suchen.mobile.de/fahrzeuge/printView.html?id=${listingId}`),
       },
     )
   }
@@ -245,23 +499,31 @@ function looksLikeListing(text: string) {
   return text.includes('Kilometerstand') || text.includes('### Technische Daten') || text.includes('## ')
 }
 
+async function fetchText(url: string, headers?: Record<string, string>) {
+  const response = await fetch(url, {
+    headers,
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  return response.text()
+}
+
 async function fetchListingText(parsedUrl: URL) {
   const candidates = buildFetchCandidates(parsedUrl)
   let blocked = false
 
   for (const candidate of candidates) {
-    const response = await fetch(candidate.url, {
-      headers: {
-        'User-Agent': 'car-seller-service/1.0',
-        Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
-      },
+    const text = await fetchText(candidate.url, {
+      'User-Agent': 'car-seller-service/1.0',
+      Accept: 'text/plain, text/markdown;q=0.9, */*;q=0.8',
     })
 
-    if (!response.ok) {
+    if (!text) {
       continue
     }
-
-    const text = await response.text()
 
     if (isBlockedResponse(text)) {
       blocked = true
@@ -302,32 +564,77 @@ export default defineEventHandler(async (event) => {
   if (!/mobile\.de$/i.test(parsedUrl.hostname)) {
     createErrorMessage(400, 'Only mobile.de URLs are supported')
   }
+  const listingId = extractListingId(parsedUrl)
 
-  const { fetchedUrl, text } = await fetchListingText(parsedUrl)
+  let fetchedUrl: string | null = null
+  let text: string | null = null
 
-  const firstRegistration = parseFirstRegistration(text)
+  try {
+    const result = await fetchListingText(parsedUrl)
+    fetchedUrl = result.fetchedUrl
+    text = result.text
+  } catch (error) {
+    if (!listingId) {
+      throw error
+    }
+  }
+
+  let fallbackListing = listingId ? await fetchDealerHomeText(text ?? parsedUrl.toString(), listingId) : null
+
+  if (!fallbackListing && listingId) {
+    fallbackListing = await fetchDealerHomeFromSearch(listingId)
+  }
+
+  if (!text && !fallbackListing) {
+    createErrorMessage(502, 'This mobile.de listing could not be parsed. The source may be blocked or missing key vehicle data.')
+  }
+
+  const firstRegistration = text ? parseFirstRegistration(text) : null
   const ageMonths = parseAgeMonths(firstRegistration)
-  const mileageKm = parseMileage(text)
-  const fuel = parseFuel(text)
+  const mileageKm = text ? parseMileage(text) : null
+  const fuel = text ? parseFuel(text) : null
 
   const listing: ParsedListing = {
     sourceUrl: parsedUrl.toString(),
-    fetchedUrl,
-    title: parseTitle(text),
-    subtitle: parseSubtitle(text),
-    priceEur: parsePrice(text),
+    fetchedUrl: fetchedUrl ?? parsedUrl.toString(),
+    title: text ? parseTitle(text) : null,
+    subtitle: text ? parseSubtitle(text) : null,
+    priceEur: text ? parsePrice(text) : null,
     mileageKm,
     fuel,
-    transmission: parseTransmission(text),
+    transmission: text ? parseTransmission(text) : null,
     firstRegistration,
     ageMonths,
-    ...parsePower(text),
-    engineCc: parseEngineCc(text),
-    sellerType: parseSellerType(text),
-    sellerName: parseSellerName(text),
-    location: parseLocation(text),
-    co2Gkm: parseCo2(text),
-    notes: extractNotes(text),
+    ...(text ? parsePower(text) : { powerKw: null, powerPs: null }),
+    engineCc: text ? parseEngineCc(text) : null,
+    sellerType: text ? parseSellerType(text) : 'unknown',
+    sellerName: text ? parseSellerName(text) : null,
+    location: text ? parseLocation(text) : null,
+    co2Gkm: text ? parseCo2(text) : null,
+    notes: text ? extractNotes(text) : [],
+  }
+
+  if (fallbackListing) {
+    listing.title = fallbackListing.shortTitle ?? listing.title
+    listing.subtitle = fallbackListing.subTitle ?? listing.subtitle
+    listing.priceEur = fallbackListing.priceEur ?? listing.priceEur
+    listing.mileageKm = fallbackListing.mileageKm ?? listing.mileageKm
+    listing.fuel = fallbackListing.fuel ?? listing.fuel
+    listing.transmission = fallbackListing.transmission ?? listing.transmission
+    listing.firstRegistration = fallbackListing.firstRegistration ?? listing.firstRegistration
+    listing.ageMonths = parseAgeMonths(listing.firstRegistration)
+    listing.powerKw = fallbackListing.powerKw ?? listing.powerKw
+    listing.powerPs = fallbackListing.powerPs ?? listing.powerPs
+    listing.engineCc = fallbackListing.engineCc ?? listing.engineCc
+    listing.sellerType = fallbackListing.sellerType ?? listing.sellerType
+    listing.sellerName = fallbackListing.sellerName ?? listing.sellerName
+    listing.location = fallbackListing.location ?? listing.location
+    listing.co2Gkm = fallbackListing.co2Gkm ?? listing.co2Gkm
+    listing.notes.push('Listing data recovered from dealer home page fallback')
+  }
+
+  if (!listing.priceEur && !listing.mileageKm && !listing.firstRegistration) {
+    createErrorMessage(502, 'This mobile.de listing could not be parsed. The source may be blocked or missing key vehicle data.')
   }
 
   return {
